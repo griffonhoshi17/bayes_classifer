@@ -33,7 +33,7 @@ def extractBigStringFromFile(filename):
 函数说明：接受一个大字符串并将其解析为字符串列表
 """
 def textParse(bigString):
-    listOfTokens = re.split(r'[^a-zA-Z0-9\']+', bigString) # 将特殊符号作为切分标志进行字符串切分， 即非字母非数字
+    listOfTokens = re.split(r'[^a-zA-Z0-9]+', bigString) # 将特殊符号作为切分标志进行字符串切分， 即非字母非数字
     print(listOfTokens)
     return [tok.lower() for tok in listOfTokens if len(tok) > 2]
 
@@ -96,9 +96,93 @@ Returns:
     pAbusive - 文档属于垃圾邮件类的概率
 """
 # TODO ...
+def trainNB0(trainMatrix, trainCategory):
+    numTrainDocs = len(trainMatrix) # 计算训练的文档数目
+    numWords = len(trainMatrix[0]) # 计算每篇文档的词条数
+    pAbusive = sum(trainCategory) / float(numTrainDocs)  # 文档属于垃圾邮件类的概率
+    p0Num = np.ones(numWords)
+    p1Num = np.ones(numWords)  # 创建numpy.ones数组,词条出现数初始化为1,拉普拉斯平滑
+    p0Denom = 2.0
+    p1Denom = 2.0  # 分母初始化为2 ,拉普拉斯平滑
+    for i in range(numTrainDocs):
+        if trainCategory[i] == 1:  # 统计属于侮辱类的条件概率所需的数据，即P(w0|1),P(w1|1),P(w2|1)···
+            p1Num += trainMatrix[i]
+            p1Denom += sum(trainMatrix[i])
+        else:  # 统计属于非侮辱类的条件概率所需的数据，即P(w0|0),P(w1|0),P(w2|0)···
+            p0Num += trainMatrix[i]
+            p0Denom += sum(trainMatrix[i])
+    p1Vect = np.log(p1Num / p1Denom)
+    p0Vect = np.log(p0Num / p0Denom)   #取对数，防止下溢出
+    return p0Vect, p1Vect, pAbusive  # 返回属于正常邮件类的条件概率数组，属于侮辱垃圾邮件类的条件概率数组，文档属于垃圾邮件类的概率
 
+
+"""
+函数说明:朴素贝叶斯分类器分类函数
+Parameters:
+	vec2Classify - 待分类的词条数组
+	p0Vec - 正常邮件类的条件概率数组
+	p1Vec - 垃圾邮件类的条件概率数组
+	pClass1 - 文档属于垃圾邮件的概率
+Returns:
+	0 - 属于正常邮件类
+	1 - 属于垃圾邮件类
+"""
+def classifyNB(vec2Classify, p0Vec, p1Vec, pClass1):
+    #p1 = reduce(lambda x, y: x * y, vec2Classify * p1Vec) * pClass1  # 对应元素相乘
+    #p0 = reduce(lambda x, y: x * y, vec2Classify * p0Vec) * (1.0 - pClass1)
+    p1=sum(vec2Classify*p1Vec)+np.log(pClass1)
+    p0=sum(vec2Classify*p0Vec)+np.log(1.0-pClass1)
+    if p1 > p0:
+        return 1
+    else:
+        return 0
+
+
+"""
+函数说明:测试朴素贝叶斯分类器，使用朴素贝叶斯进行交叉验证
+"""
+def spamTest():
+    docList = []
+    classList = []
+    fullText = []
+    spamlist, hamlist = extractBigStringFromFile('spam.xlsx')
+    for i in range(1, 26):  # 遍历25个txt文件
+        randIndex = int(random.uniform(0, len(spamlist)))
+        wordList = textParse(spamlist[randIndex])
+        docList.append(wordList)
+        fullText.append(wordList)
+        classList.append(1) # 标记垃圾邮件，1表示垃圾文件
+        randIndex = int(random.uniform(0, len(hamlist)))
+        wordList = textParse(hamlist[randIndex])
+        docList.append(wordList)
+        fullText.append(wordList)
+        classList.append(0)  # 标记正常邮件，0表示正常文件
+    vocabList = createVocabList(docList)  # 创建词汇表，不重复
+    
+    trainingSet = list(range(50)) # [0, 1, 2, ... , 49, 50]
+    testSet = []  # 创建存储训练集的索引值的列表和测试集的索引值的列表
+    
+    for i in range(10):  # 从50个邮件中，随机挑选出40个作为训练集,10个做测试集
+        randIndex = int(random.uniform(0, len(trainingSet)))  # 随机选取索索引值
+        testSet.append(trainingSet[randIndex])  # 添加测试集的索引值
+        del (trainingSet[randIndex])  # 在训练集列表中删除添加到测试集的索引值
+    
+    trainMat = []
+    trainClasses = []  # 创建训练集矩阵和训练集类别标签系向量
+    
+    for docIndex in trainingSet:  # 遍历训练集
+        trainMat.append(setOfWords2Vec(vocabList, docList[docIndex]))  # 将生成的词集模型添加到训练矩阵中
+        trainClasses.append(classList[docIndex])  # 将类别添加到训练集类别标签系向量中
+    
+    p0V, p1V, pSpam = trainNB0(np.array(trainMat), np.array(trainClasses))  # 训练朴素贝叶斯模型
+    errorCount = 0  # 错误分类计数
+    for docIndex in testSet:  # 遍历测试集
+        wordVector = setOfWords2Vec(vocabList, docList[docIndex])  # 测试集的词集模型
+        if classifyNB(np.array(wordVector), p0V, p1V, pSpam) != classList[docIndex]:  # 如果分类错误
+            errorCount += 1  # 错误计数加1
+            print("分类错误的测试集：", docList[docIndex])
+    print('错误率：%.2f%%' % (float(errorCount) / len(testSet) * 100))
 
 
 if __name__ == '__main__':
-    print([0]*10)
-    pass
+    spamTest()
