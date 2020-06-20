@@ -114,7 +114,7 @@ def classifyNB(vec2Classify, p0Vec, p1Vec, pClass1):
 函数说明:接收一个大字符串并将其解析为字符串列表
 """
 def textParse(bigString):  # 将字符串转换为字符列表
-    listOfTokens = re.split(r'\W*', bigString)  # 将特殊符号作为切分标志进行字符串切分，即非字母、非数字
+    listOfTokens = re.split(r'[^a-zA-Z0-9]+', bigString)  # 将特殊符号作为切分标志进行字符串切分，即非字母、非数字
     return [tok.lower() for tok in listOfTokens if len(tok) > 2]  # 除了单个字母，例如大写的I，其它单词变成小写
  
  
@@ -158,3 +158,4 @@ def spamTest():
  
 if __name__ == '__main__':
     spamTest()
+
